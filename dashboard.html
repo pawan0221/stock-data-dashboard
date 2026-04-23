@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Stock Dashboard</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-page:    #f4f5f7;
+      --bg-card:    #ffffff;
+      --border:     #e5e7eb;
+      --border-ctl: #d0d5dd;
+      --text-h:     #1a1a2e;
+      --text-body:  #374151;
+      --text-muted: #6b7280;
+      --text-hint:  #9ca3af;
+      --hover-seg:  #f0f0f0;
+      --seg-active-bg: #1a1a2e;
+      --seg-active-tx: #ffffff;
+    }
+
+    body.dark {
+      --bg-page:    #0f1117;
+      --bg-card:    #1a1d27;
+      --border:     #2e3347;
+      --border-ctl: #2e3347;
+      --text-h:     #f1f5f9;
+      --text-body:  #cbd5e1;
+      --text-muted: #94a3b8;
+      --text-hint:  #64748b;
+      --hover-seg:  #252836;
+      --seg-active-bg: #378add;
+      --seg-active-tx: #ffffff;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg-page);
+      color: var(--text-h);
+      min-height: 100vh;
+      padding: 2rem;
+      transition: background 0.25s, color 0.25s;
+    }
+
+    .dash { max-width: 960px; margin: 0 auto; }
+
+    .topbar {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap; gap: 12px;
+      margin-bottom: 1.5rem;
+    }
+    .topbar h1 { font-size: 22px; font-weight: 600; color: var(--text-h); }
+    .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+    select {
+      font-size: 13px; padding: 7px 12px;
+      border: 1px solid var(--border-ctl);
+      border-radius: 8px;
+      background: var(--bg-card); color: var(--text-h);
+      cursor: pointer; outline: none;
+      transition: background 0.2s, border-color 0.2s, color 0.2s;
+    }
+    select:focus { border-color: #378add; }
+
+    #dmBtn {
+      background: var(--bg-card);
+      border: 1px solid var(--border-ctl);
+      border-radius: 8px;
+      padding: 6px 11px;
+      font-size: 17px;
+      cursor: pointer;
+      line-height: 1;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    #dmBtn:hover { background: var(--hover-seg); }
+
+    .seg {
+      display: flex;
+      border: 1px solid var(--border-ctl);
+      border-radius: 8px; overflow: hidden;
+    }
+    .seg button {
+      background: transparent; border: none;
+      padding: 7px 14px; font-size: 13px;
+      cursor: pointer; color: var(--text-muted);
+      transition: background 0.15s, color 0.15s;
+    }
+    .seg button + button { border-left: 1px solid var(--border-ctl); }
+    .seg button.active { background: var(--seg-active-bg); color: var(--seg-active-tx); font-weight: 500; }
+    .seg button:hover:not(.active) { background: var(--hover-seg); }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px; margin-bottom: 1.5rem;
+    }
+    .metric {
+      background: var(--bg-card);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      padding: 1rem 1.25rem;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .metric .label { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+    .metric .value { font-size: 22px; font-weight: 600; color: var(--text-h); }
+    .metric .sub   { font-size: 12px; margin-top: 4px; }
+    .up { color: #16a34a; }
+    .dn { color: #dc2626; }
+
+    .chart-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem 1rem;
+      margin-bottom: 1rem;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .chart-header {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px; flex-wrap: wrap; gap: 8px;
+    }
+    .chart-title { font-size: 14px; font-weight: 600; color: var(--text-body); }
+
+    .legend { display: flex; gap: 16px; flex-wrap: wrap; }
+    .legend span { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
+    .legend span b { width: 14px; height: 3px; display: inline-block; border-radius: 2px; }
+
+    .price-wrap { position: relative; height: 260px; }
+    .vol-wrap   { position: relative; height: 110px; }
+
+    .note { font-size: 12px; color: var(--text-hint); margin-top: 1.25rem; text-align: center; }
+  </style>
+</head>
+<body>
+<div class="dash">
+
+  <div class="topbar">
+    <h1>Market Overview</h1>
+    <div class="controls">
+      <select id="stockSel" onchange="render()">
+        <option value="TCS">TCS</option>
+        <option value="INFY">INFY</option>
+        <option value="RELIANCE">RELIANCE</option>
+      </select>
+      <button id="dmBtn" onclick="toggleDark()">🌙</button>
+      <div class="seg" id="rangeSeg">
+        <button class="active" onclick="setRange('1M',this)">1M</button>
+        <button onclick="setRange('3M',this)">3M</button>
+        <button onclick="setRange('6M',this)">6M</button>
+        <button onclick="setRange('1Y',this)">1Y</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="metrics" id="metrics"></div>
+
+  <div class="chart-card">
+    <div class="chart-header">
+      <span class="chart-title" id="chartTitle">Closing Price</span>
+      <div class="legend">
+        <span><b style="background:#378add"></b>Close</span>
+        <span><b style="background:#9ca3af"></b>MA20</span>
+      </div>
+    </div>
+    <div class="price-wrap">
+      <canvas id="priceChart" role="img" aria-label="Line chart of stock closing price."></canvas>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-header">
+      <span class="chart-title">Volume</span>
+      <div class="legend">
+        <span><b style="background:#16a34a"></b>Up day</span>
+        <span><b style="background:#dc2626"></b>Down day</span>
+      </div>
+    </div>
+    <div class="vol-wrap">
+      <canvas id="volChart" role="img" aria-label="Bar chart of daily trading volume."></canvas>
+    </div>
+  </div>
+
+  <p class="note">* Simulated data for demo. Replace genData() with your API fetch to show live prices.</p>
+</div>
+
+<script>
+const STOCKS = {
+  TCS:      { base: 3750,  vol: 900000  },
+  INFY:     { base: 1580,  vol: 1400000 },
+  RELIANCE: { base: 2940,  vol: 2100000 }
+};
+
+async function genData(ticker) {
+
+  const response = await fetch(
+    `http://127.0.0.1:8000/data/${ticker}`
+  );
+
+  const data = await response.json();
+
+  console.log(data);   // debug
+
+  return {
+    labels: data.Date,
+    close: data.Close,
+    vol: data.Volume
+  };
+}
+
+
+
+function ma(arr, n) {
+  return arr.map((_, i) => {
+    if (i < n - 1) return null;
+    const slice = arr.slice(i - n + 1, i + 1);
+    return +(slice.reduce((a, b) => a + b, 0) / n).toFixed(2);
+  });
+}
+
+const RANGE_DAYS = { '1M': 30, '3M': 90, '6M': 180, '1Y': 365 };
+let range = '1M';
+let isDark = false;
+let priceChartObj, volChartObj;
+
+function toggleDark() {
+  isDark = !isDark;
+  document.body.classList.toggle('dark', isDark);
+  document.getElementById('dmBtn').textContent = isDark ? '☀️' : '🌙';
+  render();
+}
+
+function setRange(r, btn) {
+  range = r;
+  document.querySelectorAll('#rangeSeg button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+async function render() {
+  const ticker = document.getElementById('stockSel').value;
+  const { labels, close, vol } =
+  await genData(ticker);
+  
+  const last   = close[close.length - 1];
+  const prev   = close[close.length - 2];
+  const chg    = last - prev;
+  const pct    = (chg / prev * 100).toFixed(2);
+  const hi     = Math.max(...close).toFixed(2);
+  const lo     = Math.min(...close).toFixed(2);
+  const avgVol = Math.round(vol.reduce((a, b) => a + b, 0) / vol.length);
+  const isUp   = chg >= 0;
+
+  document.getElementById('chartTitle').textContent = ticker + ' — Closing Price';
+  document.getElementById('metrics').innerHTML = `
+    <div class="metric">
+      <div class="label">Last Price</div>
+      <div class="value">&#8377;${last.toLocaleString('en-IN')}</div>
+      <div class="sub ${isUp ? 'up' : 'dn'}">${isUp ? '&#9650;' : '&#9660;'} &#8377;${Math.abs(chg).toFixed(2)} (${isUp ? '+' : ''}${pct}%)</div>
+    </div>
+    <div class="metric">
+      <div class="label">Period High</div>
+      <div class="value">&#8377;${(+hi).toLocaleString('en-IN')}</div>
+    </div>
+    <div class="metric">
+      <div class="label">Period Low</div>
+      <div class="value">&#8377;${(+lo).toLocaleString('en-IN')}</div>
+    </div>
+    <div class="metric">
+      <div class="label">Avg Volume</div>
+      <div class="value">${(avgVol / 1e5).toFixed(1)}L</div>
+      <div class="sub" style="color:var(--text-hint)">shares / day</div>
+    </div>
+  `;
+
+  const tickColor = isDark ? '#64748b' : '#9ca3af';
+  const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)';
+  const tooltipBg = isDark ? '#0d1117' : '#1a1a2e';
+
+  if (priceChartObj) priceChartObj.destroy();
+  priceChartObj = new Chart(document.getElementById('priceChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Close',
+          data: close,
+          borderColor: '#378add',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.3,
+          fill: true,
+          backgroundColor: (ctx) => {
+            const g = ctx.chart.ctx.createLinearGradient(0, 0, 0, 240);
+            g.addColorStop(0, 'rgba(55,138,221,0.18)');
+            g.addColorStop(1, 'rgba(55,138,221,0)');
+            return g;
+          }
+        },
+        {
+          label: 'MA20',
+          data: ma(close, 20),
+          borderColor: '#9ca3af',
+          borderWidth: 1.5,
+          borderDash: [5, 4],
+          pointRadius: 0,
+          tension: 0.3,
+          fill: false
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: tooltipBg,
+          titleColor: '#e5e7eb',
+          bodyColor: '#9ca3af',
+          padding: 10,
+          callbacks: { label: ctx => ' \u20B9' + ctx.parsed.y.toLocaleString('en-IN') }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { autoSkip: true, maxTicksLimit: 7, font: { size: 11 }, color: tickColor },
+          grid: { display: false },
+          border: { display: false }
+        },
+        y: {
+          ticks: { font: { size: 11 }, color: tickColor, callback: v => '\u20B9' + v.toLocaleString('en-IN') },
+          grid: { color: gridColor },
+          border: { display: false }
+        }
+      }
+    }
+  });
+
+  if (volChartObj) volChartObj.destroy();
+  volChartObj = new Chart(document.getElementById('volChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Volume',
+        data: vol,
+        backgroundColor: vol.map((_, i) =>
+          (i > 0 && close[i] >= close[i - 1]) ? 'rgba(22,163,74,0.55)' : 'rgba(220,38,38,0.5)'
+        ),
+        borderRadius: 2
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: tooltipBg,
+          titleColor: '#e5e7eb',
+          bodyColor: '#9ca3af',
+          padding: 8,
+          callbacks: { label: ctx => ' ' + (ctx.parsed.y / 1e5).toFixed(1) + 'L shares' }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { autoSkip: true, maxTicksLimit: 7, font: { size: 10 }, color: tickColor },
+          grid: { display: false },
+          border: { display: false }
+        },
+        y: {
+          ticks: { font: { size: 10 }, color: tickColor, callback: v => (v / 1e5).toFixed(0) + 'L' },
+          grid: { color: gridColor },
+          border: { display: false }
+        }
+      }
+    }
+  });
+}
+
+render();
+</script>
+</body>
+</html>
